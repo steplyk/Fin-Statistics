@@ -1,0 +1,135 @@
+---
+title: "Project 2"
+author: "Tess Steplyk"
+date: "12/21/2016"
+output: html_document
+---
+
+``````{r, echo=FALSE, include=FALSE, cache=FALSE}
+setwd("/Users/TessSteplyk/Google Drive/Stat461")
+library(fBasics)
+library(quantmod)
+library(rugarch)
+library(TSA)
+```
+
+```{r}
+require(quantmod)
+getSymbols("TRV", from="2006-01-01", to="2016-01-01")
+head(TRV)
+tail(TRV)
+dim(TRV)
+chartSeries(TRV$TRV.Adjusted, name= "Closing Prices TRV" , theme="white") #plot adjusted stocks
+TRV.rtn = diff(log(TRV$TRV.Adjusted))[-1,] #calc log rtn based on adj prices
+```
+
+
+QQ for tGARCH
+```{r}
+return=as.vector(diff(log(TRV$TRV.Adjusted))[-1,])
+######GARCH(1,1)#######
+spec3=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+fit3 = ugarchfit(return, spec=spec3)
+plot(fit3, which=9); plot(fit3, which=3)
+fitted.sigma = unclass(sigma(fit3))[,1]
+forecast=ugarchforecast(fit3, n.ahead=60) # 60-step ahead forecast with refined model
+plot(forecast, which=1) # plot for predicted mean value +/- predicted volatility for the next 10 days
+plot(forecast, which=3) # plot for predicted sigma for the next 10 days
+
+#######tGARCH(1,2)#######
+tspec3=ugarchspec(
+  variance.model = list(model = "fGARCH", submodel="TGARCH", garchOrder = c(1, 2)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+tfit3 = ugarchfit(return, spec=tspec3)
+plot(tfit3, which=9); plot(tfit3, which=3)
+fitted.sigma12 = unclass(sigma(tfit3))[,1]
+forecast12=ugarchforecast(tfit3, n.ahead=60) # 60-step ahead forecast with refined model
+plot(forecast12, which=1) # plot for predicted mean value +/- predicted volatility for the next 10 days
+plot(forecast12, which=3) # plot for predicted sigma for the next 10 days
+
+####tGARCH(2,2)#####
+tspec2=ugarchspec(
+  variance.model = list(model = "fGARCH", submodel="TGARCH", garchOrder = c(2, 2)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+tfit2 = ugarchfit(return, spec=tspec2)
+plot(tfit2, which=9); plot(tfit2, which=3)
+fitted.sigma22 = unclass(sigma(tfit2))[,1]
+forecast22=ugarchforecast(tfit2, n.ahead=60) # 60-step ahead forecast with refined model
+plot(forecast22, which=1) # plot for predicted mean value +/- predicted volatility for the next 10 days
+plot(forecast22, which=3) # plot for predicted sigma for the next 10 days
+
+
+round(coef(tfit3),6)
+```
+
+tGARCH Forecast / Black Scholes
+```{r}
+
+```
+
+Call/Put
+```{r}
+call.price <- function(x = 1, t = 0, T = 1, r = 1, sigma = 1, K=1){
+  d2<-(log(x/K)+(r-0.5*sigma^2)*(T-t))/(sigma*sqrt(T-t)) 
+  d1<-d2+sigma*sqrt(T-t) 
+  x*pnorm(d1)-K*exp(-r*(T-t))*pnorm(d2)
+}
+
+put.price <- function(x = 1 ,t = 0, T =1 , r = 1, sigma=1, K=1){
+  d2<-(log(x/K)+(r-0.5*sigma^2)*(T-t))/(sigma* sqrt(T-t)) 
+  d1<-d2+sigma*sqrt(T-t) 
+  K*exp(-r*(T-t))*pnorm(-d2)-x*pnorm(-d1)
+}
+
+# specify parameters
+S0 <- as.numeric(TRV.rtn[length(TRV.rtn)]) ; K <- 0:80; r <- 0.06; T <- 60; sigma <- 0.1
+C <-call.price(x=S0, t=0, T=T, r=r, K=K, sigma=sigma)
+P <-put.price(x=S0, t=0, T=T , r=r, K=K, sigma=sigma)
+par(mfrow=c(1,2))
+plot(K,C,type="l", xlab="strike price K", ylab="fair premium for call option")
+plot(K,P,type="l", xlab="strike price K", ylab="fair premium for put option")
+
+```
+
+Black-Scholes Estimations
+
+new.sigma = unclass(sigma(forecast)[,1])
+new.fitted = unclass(fitted(forecast)[,1])
+S0 = as.numeric(TRV.rtn[length(TRV.rtn)])
+T = 60
+r = new.fitted[60]
+volatility = new.sigma[60]
+Sto = S0*0.6
+Sfr = S0*1.6
+sigma=0.1
+K = seq(Sto, Sfr, by = sigma)
+d1 = (log(S0/K) + (r + (volatility^2)/2)*T)/(volatility*sqrt(T))
+d2 = (log(S0/K) + (r - (volatility^2)/2)*T)/(volatility*sqrt(T))
+C0 = S0*pnorm(d1)-K*exp(-r*T)*pnorm(d2)
+P0 = K*exp(-r*T)*pnorm(-d2)-S0*(pnorm(-d1))
+profit = pmax((S0*exp((r - (volatility^2)/2)*T) - K), 0) - C0
+
+par(mfrow = c(1,3), cex = 0.75)
+plot(K, C0, type = "l", xlab="Strike Price", ylab="Fair Price", main="Risk Neutral Pricing of Call") 
+plot(K, pnorm(d2), type = "l", ylab = "Probability", xlab="Strike Price", main="P(Call exercised) vs. K")
+plot(K, profit, main="Predicted Profit", ylab="Profit", xlab="Strike Price", type = "l")
+
+ST = S0*exp((r - (volatility^2)/2)*T)
+
+profit = pmax((K - S0*exp((r - (volatility^2)/2)*T)), 0) - P0
+par(mfrow = c(1,3), cex = 0.75)
+plot(K, P0, type = "line", xlab="Strike Price", ylab="Fair Price", main="Risk Neutral Pricing of Put") 
+plot(K, pnorm(-d2), type = "l", ylab="Probability", xlab="Strike Price", main = "P(Put Exercised) vs. K") 
+plot(K, profit, type = "l", main = "Predicted Profit")
+
+v = coef(tfit3)[length(coef(tfit3))]
+last.n = length(TRV.rtn)
+VaRm = unclass(coef(tfit3)[1] + qt(0.95, v)*sigma(tfit3)[last.n])[1]
+ESm = unclass(coef(tfit3)[1] + sigma(tfit3)[last.n][1]*dt(qt(0.95, v), v)/0.05*((v + dt(qt(0.95, v), v)^2)/(v - 1)))[1]
+cash.varm = VaRm * S0
+cash.esm = ESm * S0

@@ -1,0 +1,178 @@
+---
+title: "Homework"
+author: "Tess Steplyk"
+date: "12/14/2016"
+output: html_document
+---
+
+```{r, echo=FALSE, include=FALSE, cache=FALSE}
+setwd("/Users/TessSteplyk/Google Drive/Stat461")
+library(quantmod)
+library(rugarch)
+library( fArma )
+library(TSA)
+```
+
+##2.Nonstationary Time Series Models (Simulation and Comparison)
+```{r}
+set.seed(1)
+N <- 100    # number of samples
+T <- 500    # number of steps
+alpha <- 1
+beta <- .03
+tau <- .04
+epsilon <- matrix(rnorm(N*T, 0, tau), nrow=N)
+eta <- rep(NA, T)
+for (i in seq(T)) {
+    if (i == 1) eta[i] <- beta + epsilon[i]
+    else eta[i] <- eta[i-1] + beta + epsilon[i]
+}
+sigma <- 0.3
+noise <- matrix(rnorm(N*T, 0, sigma), nrow=N)
+y <- matrix(NA, nrow=N, ncol=T)
+for (n in seq(N)) {
+    for (t in seq(T)) {
+        y[n,t] <- alpha + eta[t] + noise[n,t]
+    }
+}
+matplot(t(y), type='l')
+
+set.seed(1)
+N <- 100    # number of samples
+T <- 1000    # number of steps
+alpha <- 1
+beta <- .03
+tau <- .04
+epsilon <- matrix(rnorm(N*T, 0, tau), nrow=N)
+eta <- rep(NA, T)
+for (i in seq(T)) {
+    if (i == 1) eta[i] <- beta + epsilon[i]
+    else eta[i] <- eta[i-1] + beta + epsilon[i]
+}
+sigma <- 0.3
+noise <- matrix(rnorm(N*T, 0, sigma), nrow=N)
+y <- matrix(NA, nrow=N, ncol=T)
+for (n in seq(N)) {
+    for (t in seq(T)) {
+        y[n,t] <- alpha + eta[t] + noise[n,t]
+    }
+}
+matplot(t(y), type='l')
+```
+```{r}
+set.seed(1)
+r <- sample(1:500, 1) #random start
+N <- r # number of samples
+T <- 500    # number of steps
+alpha <- 1
+beta <- .03
+tau <- .04
+epsilon <- matrix(rnorm(N*T, 0, tau), nrow=N)
+eta <- rep(NA, T)
+for (i in seq(T)) {
+    if (i == 1) eta[i] <- beta + epsilon[i]
+    else eta[i] <- eta[i-1] + beta + epsilon[i]
+}
+sigma <- 0.3
+noise <- matrix(rnorm(N*T, 0, sigma), nrow=N)
+y <- matrix(NA, nrow=N, ncol=T)
+for (n in seq(N)) {
+    for (t in seq(T)) {
+        y[n,t] <- alpha + eta[t] + noise[n,t]
+    }
+}
+matplot(t(y), type='l')
+
+set.seed(1)
+r <- sample(1:500, 1) #random start
+N <- r # number of samples
+T <- 1000    # number of steps
+alpha <- 1
+beta <- .03
+tau <- .04
+epsilon <- matrix(rnorm(N*T, 0, tau), nrow=N)
+eta <- rep(NA, T)
+for (i in seq(T)) {
+    if (i == 1) eta[i] <- beta + epsilon[i]
+    else eta[i] <- eta[i-1] + beta + epsilon[i]
+}
+sigma <- 0.3
+noise <- matrix(rnorm(N*T, 0, sigma), nrow=N)
+y <- matrix(NA, nrow=N, ncol=T)
+for (n in seq(N)) {
+    for (t in seq(T)) {
+        y[n,t] <- alpha + eta[t] + noise[n,t]
+    }
+}
+matplot(t(y), type='l')
+```
+##4.GARCH Model (Empirical Application)
+```{r}
+getSymbols("AAPL", from="2005-10-31", to="2015-10-31")
+return=diff(log(AAPL$AAPL.Adjusted))[-1,]
+```
+```{r}
+amodel=arima(return, order=c(4,0,1))
+Box.test(na.omit(amodel$residuals), lag=7, fitdf=6)
+Box.test(na.omit(amodel$residuals), lag=7, fitdf=6, type="Ljung")
+```
+```{r}
+spec1=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), 
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "sstd")
+m1=ugarchfit(return,spec=spec1) 
+round(coef(m1),6)
+```
+$$r_t = 0.001652 + a_t$$
+$$sigma_t^2 = 0.063651*a_{t-1}^2 + 0.925716*sigma_{t-1}^2$$
+*standardized student’s t distribution with skew parameter=1.009989 and shape parameter
+parameter=5.449967*
+*Yes, it is accurate. Because the time-varying volatility is more common than constant volatility.*
+```{r}
+forecast=ugarchforecast(m1, data=NULL, n.ahead = 10, n.roll= 0, out.sample = 0)
+forecast
+
+plot(forecast, which=1)
+plot(forecast, which=3)
+```
+```{r}
+#iGARSCH
+spec1=ugarchspec(
+variance.model = list(model = "iGARCH", 
+            garchOrder = c(1, 1)), 
+            mean.model = list(armaOrder = c(0, 0)), 
+            distribution.model = "norm")
+m1=ugarchfit(return,spec=spec1) 
+round(coef(m1),4)
+```
+$$r_t = 0.0019 + a_t$$
+$$sigma_t^2 = 0.0996*a_{t-1}^2 + 0.9004*sigma_{t-1}^2$$
+*Yes*
+```{r}
+#tGARCH
+spec3=ugarchspec(
+variance.model = list(model = "fGARCH", submodel="TGARCH", 
+      garchOrder = c(1, 1)), 
+      mean.model = list(armaOrder = c(0, 0)), 
+      distribution.model = "norm")
+m3=ugarchfit(return,spec=spec3) 
+round(coef(m3),4)
+```
+$$r_t = 0.0014 + a_t$$
+$$sigma_t^2 = 0.0943*a_{t-1}^2 + 0.8881*sigma_{t-1}^2$$
+*Yes*
+```{r}
+#GARCH-M
+spec2 = ugarchspec(
+variance.model=list(model="sGARCH", 
+           garchOrder=c(1,1)), 
+            mean.model=list(armaOrder=c(0,0), 
+            archm=T, archpow=2), 
+            distribution.model = "norm")
+m2=ugarchfit(return,spec=spec2) 
+round(coef(m2),4)
+```
+$$r_t = 0.0019 + a_t$$
+$$sigma_t^2 = 0.0829*a_{t-1}^2 + 0.8944*sigma_{t-1}^2$$
+*Yes*

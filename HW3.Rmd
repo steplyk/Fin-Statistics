@@ -1,0 +1,133 @@
+---
+title: "Stat 461 HW3"
+author: "Tess Steplyk"
+date: "10/21/2016"
+output: html_document
+---
+
+```{r, echo=FALSE, include=FALSE, cache=FALSE}
+setwd("/Users/TessSteplyk/Google Drive/Stat461")
+library(fBasics)
+library(GUIDE)
+```
+
+####(1)
+#####(a)
+```{r}
+set.seed(1234)
+mu=0.2 # drift
+sigma=0.5 # volatility
+T=1 # time interval [0,T]
+S0=100 # initial price
+n=10000 # divide the interval [0,T] into n subintervals
+dt=T/n # time length for each subinterval
+t=seq(0,T,by=dt) 
+
+R = mu*dt+sigma*rnorm(n,mean=0,sd=sqrt(dt)) 
+Q = mu*dt+sigma*rnorm(n,mean=0,sd=sqrt(dt)) 
+S=c(S0, rep(0,n)) 
+
+for (i in 1:n){
+  S[i+1]=S[i]*R[i]+S[i] 
+  S[i+1]=S[i]*Q[i]+S[i] 
+  }
+
+plot(t,S,type="l",main="Geometric Brownian Motion", xlab="Time", ylab="")
+mean=c(S0*exp(mu*t)) # mean trend: St=S0*exp(mu*t) 
+lines(t,mean,col="red")
+```
+
+
+######(b)
+```{r}
+set.seed(500)
+mu=0.2 # drift
+sigma=0.5 # volatility
+T=1 # time interval [0,T]
+S0=100 # initial price
+n=10000 # divide the interval [0,T] into n subintervals
+dt=T/n # time length for each subinterval
+t=seq(0,T,by=dt)
+
+#one path
+R = mu*dt+sigma*rnorm(n,mean=0,sd=sqrt(dt)) 
+Q = mu*dt+sigma*rnorm(n,mean=0,sd=sqrt(dt)) 
+S=c(S0, rep(0,n)) 
+
+for (i in 1:n){
+  S[i+1]=S[i]*R[i]+S[i] 
+  S[i+1]=S[i]*Q[i]+S[i] 
+  }
+plot(t,S,type="l",main="Geometric Brownian Motion", xlab="Time", ylab="", ylim=c(0, 130))
+abline(v=.8)
+abline(h=120)
+mean=c(S0*exp(mu*t)) # mean trend: St=S0*exp(mu*t)
+lines(t,mean,col="red")
+
+R[R>120]
+```
+
+*There are no simulated value of S that is greater than 120 at, or after, t=0.8*
+
+
+####(5)
+#####(a)
+```{r}
+S=60
+K=68
+T=1
+r=0.06
+σ=0.10
+
+#Call-Put
+blackscholes <- function(S, K, r, T, σ) {
+    values <- c(2)
+    d1 <- (log(S/K)+(r+sigma^2/2)*T)/(sigma*sqrt(T))
+    d2 <- d1 - sigma * sqrt(T)
+    values[1] <- S*pnorm(d1) - K*exp(-r*T)*pnorm(d2)
+    values[2] <- K*exp(-r*T) * pnorm(-d2) - S*pnorm(-d1)
+    values
+}
+blackscholes(S, K, r, T, σ)
+```
+
+*Call = 10.32518 , Put = 14.36517*
+
+#####(b)
+```{r}
+S=60
+Kb=(50:80)
+T=1
+r=0.06
+σ=0.10
+
+plot(blackscholes(S, Kb, r, T, σ))
+```
+
+*There is an inverse relationship between the fair premium of a call option and its strike price.*
+
+#####(c)
+```{r}
+S=60
+K=68
+T=1
+rc=(0.01:0.1)
+σ=0.10
+
+plot(blackscholes(S, K, rc, T, σ))
+```
+
+*There is a linear relationship between the fair premium of a call option and interest rate.*
+
+#####(d)
+```{r}
+S=60
+K=68
+T=1
+r=0.06
+σd=(0.1:0.3)
+
+plot(blackscholes(S, K, r, T, σd))
+```
+
+*There is a linear relationship between the fair premium of a call option and volatility.*

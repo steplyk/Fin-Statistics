@@ -1,0 +1,322 @@
+---
+title: "Project"
+author: "Tess Steplyk"
+date: "11/29/2016"
+output: html_document
+---
+
+``````{r, echo=FALSE, include=FALSE, cache=FALSE}
+setwd("/Users/TessSteplyk/Google Drive/Stat461")
+library(fBasics)
+library(quantmod)
+library(rugarch)
+library(TSA)
+```
+
+```{r}
+getSymbols("TRV") #Travlerers Prop/Casual
+getSymbols("TRV", from="2006-01-01", to="2016-01-01")
+head(TRV)
+tail(TRV)
+dim(TRV)
+chartSeries(TRV$TRV.Adjusted, name= "Closing Prices TRV" , theme="white") #plot adjusted stocks
+TRV.rtn = diff(log(TRV$TRV.Adjusted))[-1,] #calc log rtn based on adj prices
+chartSeries(TRV.rtn, name= "Log Returns TRV", theme="white")
+TRV.srtn = exp(TRV.rtn)-1
+chartSeries(TRV.srtn, name= "Simple Net Returns TRV", theme="white")
+
+#####################
+
+sym = TRV.rtn[15,]
+s = sym/sqrt(6/length(TRV.rtn))
+s
+ps = 2*pnorm(s, lower.tail = FALSE)
+ps
+kurt = TRV.rtn[16,]
+kurt
+k = (kurt - 3)/sqrt(24/length(TRV.rtn))
+k
+pk = 2*pnorm(k, lower.tail = FALSE)
+pk
+```
+
+
+```{r}
+basicStats(TRV.rtn)
+normalTest(as.vector(TRV.rtn), method="jb")
+skewness(TRV.rtn)/sqrt(6/length(TRV.rtn))
+kurtosis(TRV.rtn)/sqrt(24/length(TRV.rtn))
+```
+
+ACF PACF
+```{r}
+return=as.vector(diff(log(TRV$TRV.Adjusted))[-1,])
+par(mfrow=c(1,2))
+acf(TRV.rtn); pacf(TRV.rtn)
+
+acf(TRV.rtn)$acf #estimated acf values for all 35 legs, serial correlations do not appear to be significant for the first 10 lags
+
+log(length(TRV.rtn)) # choose m=8 at which test has better power performance
+
+Box.test(TRV.rtn, lag=34) # Box-Pierce test: reject null, v small p-val
+
+Box.test(TRV.rtn, lag=34, type="Ljung") # Ljung-Box test: reject null, v small p-val
+
+eacf(TRV.rtn)
+
+m=eacf(TRV.rtn, 7, 13)
+
+print(m$eacf[0:7, 0:13], digits=1)
+
+
+model=arima(TRV.rtn, order=c(2,0,0))
+model
+plot(na.omit(model$residuals), ylab="residuals")
+acf(na.omit(model$residuals))
+```
+
+
+Ljung #APPENDIX
+```{r}
+return=as.vector(diff(log(TRV$TRV.Adjusted))[-1,])
+spec1=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 0)), 
+  mean.model = list(armaOrder = c(0, 2), include.mean=FALSE), 
+  fixed.pars=list(ma1=0),
+distribution.model = "sstd") # specify model structure
+m1=ugarchfit(return,spec=spec1) # fit ARMA(0,2)-ARCH(1) model show(m1) 
+m1# show model fit
+
+######### estimated volatilities ######### 
+plot((sigma(m1))^2, type="b",
+     ylab="Fitted Conditional Volatility", xlab="Time", main="Estimated Volatility")
+
+infocriteria(m1) # information criteria list (AIC/BIC/SIC)
+
+m2=ar(as.vector(return), method = "mle")
+m2$order #11
+plot(0:12, m2$aic, type ="o", xlab="order", ylab="AIC") #aic lag
+
+
+
+
+
+acf(TRV.rtn) #lag tails off at 12
+pacf(TRV.rtn)
+
+
+m3=ar(as.vector(TRV.rtn), method="mle") # automatic AR fitting using AIC criterion 
+m3$order # lag chosen by AIC criterion, AR(4) model minimizes AIC
+names(m3)
+print(m3$aic,digits=3) # print out AIC values as a function of P for AR(P) model
+par(mfrow=c(1,1))
+plot(0:12,m3$aic,type="o",xlab="order",ylab="aic") # plot AIC as a function of lag
+m3
+
+m4=arima(TRV.rtn,order=c(4,0,0)) # another way to fit the model with specified lags 
+m4 # model summary
+names(m4)
+
+
+#########Stationarity#########
+options(digits=4)
+p1=c(1,-m4$coef[1:4]) # extract estimated coefficients from model output 
+p1
+roots=polyroot(p1) # solutions to characteristic equation 
+roots
+c.roots=1/roots # characteristic roots are inverses of solutions above 
+c.roots
+Mod(c.roots) # modulus of characteristic roots are less than 1, process is stationary
+
+############Remove insignificant parameters.#########
+m4$coef #estim coeff
+vcov(m4) # variance-covariance matrix of estimated coefficients
+m4$coef/sqrt(diag(vcov(m4))) # check insignificant coefficients
+m5=arima(TRV.rtn,order=c(4,0,0),fixed=c(NA,NA,0,NA,0)) # remove insignificant coefficients and refit 
+m5 # model summary
+par(mfrow=c(1,2))
+plot(na.omit(m5$resid), ylab="residuals") # residual series still doesn't appears to have constant mean (close to 0)
+acf(na.omit(m3$resid), lag=11, main="ACF of residuals") # acf of residuals, no significant serial correlation
+Box.test(na.omit(m3$resid), lag=34, fitdf=11) # Box Pierce test
+Box.test(na.omit(m3$resid), lag=34, fitdf=11, type="Ljung") # Ljung Box test
+
+
+pred<-predict(m5,n.ahead=40) # 40 step ahead forecast 
+plot(as.vector(TRV.rtn)[900:1000],xlim=c(1,140),type="l",ylab="",xlab="") # plot last 100 observations 
+lines(101:140, pred$pred,col="blue", lwd=2) # add predicted values 
+lines(101:140,pred$pred+2*pred$se,col="red",lty=3, lwd=2) # add upper confidence bound for 
+lines(101:140,pred$pred-2*pred$se,col="red",lty=3, lwd=2) # add lower confidence bound forpredicted value
+```
+
+
+ARCH Model
+```{r}
+require(rugarch)
+require(quantmod)
+return=as.vector(diff(log(TRV$TRV.Adjusted))[-1,])
+##################################
+# Mean Structure ARMA(2,0) Model #
+################################## 
+#m1=arima(return,order=c(2,0,0),fixed=c(0,NA,0))
+#m1
+#par(mfrow=c(1,2))
+#acf(m1$residuals^2); pacf(m1$residuals^2)
+
+################################################
+# Volatility Structure ARMA(0,4)-ARCH(5) Model #
+################################################
+# ugarchspec: for specifying model structure.
+#             sGARCH stands for standard GARCH model.
+#             garchOrder: first number (5 here) corresponds to ARCH order
+#             armaOrder: corresponds to orders in ARMA model
+#             include.mean: whether to include mean (mu) in the mean structure
+#             fixed.pars: fix the following parameters: ma1, ma2, ma3 to be equal to 0
+# distribution.model: distribution assumption on error terms (normal here) 
+return=as.vector(diff(log(TRV$TRV.Adjusted))[-1,])
+spec1=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 0)), 
+  mean.model = list(armaOrder = c(0, 1), include.mean=FALSE), 
+  fixed.pars=list(ma1=0),
+distribution.model = "norm") # specify model structure
+m=ugarchfit(return,spec=spec1) 
+show(m)# show model fit
+infocriteria(m1)
+
+spec2=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 0)), 
+  mean.model = list(armaOrder = c(0, 0), include.mean=FALSE), 
+  fixed.pars=list(alpha3=0),
+  distribution.model = "sstd")
+m2=ugarchfit(return,spec=spec2)
+show(m2)
+par(mfrow=c(1,3))
+plot(m2, which=9); #plot(m2, which=10); plot(m2, which=11) # check model assumption
+ugarchforecast(m2, n.ahead=8) # 8-step ahead forecast with refined model
+```
+
+GARCH
+```{r}
+return=as.vector(diff(log(TRV$TRV.Adjusted))[-1,])
+######GARCH#########
+spec3=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+fit3 = ugarchfit(return, spec=spec3)
+fit3
+infocriteria(fit3)
+plot(fit3, which=2)
+plot((sigma(fit3))^2, type="b",
+     ylab="Fitted Conditional Volatility", xlab="Time", main="Estimated Volatility for GARCH(1,1)")
+
+spec13=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 2)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+fit13 = ugarchfit(return, spec=spec13)
+
+spec23=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 1)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+fit23 = ugarchfit(return, spec=spec23)
+fit23
+
+
+spec22=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 2)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+
+```
+#######iGARCH#######
+ispec3=ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)), 
+  mean.model = list(armaOrder = c(0, 1)), 
+  fixed.pars=list(omega=0),
+  distribution.model = "sstd")
+ifit3 = ugarchfit(return, spec=ispec3)
+ifit3
+istd.res.3 = return / sigma(ifit3)
+```
+```{r}
+#######tGARCH#######
+tspec3=ugarchspec(
+  variance.model = list(model = "fGARCH", submodel="TGARCH", garchOrder = c(1, 2)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+tfit3 = ugarchfit(return, spec=tspec3)
+tfit3
+infocriteria(tfit3)
+plot(tfit3, which=2)
+```
+#######mGARCH#######
+mspec3=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 2)), 
+  mean.model = list(armaOrder = c(0, 2), archm=T), 
+  distribution.model = "sstd")
+mfit3 = ugarchfit(return, spec=mspec3)
+mfit3
+mstd.res.3 = return / sigma(mfit3)
+##
+#######iGARCH#######
+ispec2=ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  fixed.pars=list(omega=0),
+  distribution.model = "sstd")
+ifit2 = ugarchfit(return, spec=ispec2)
+ifit2
+```
+```{r}
+#######tGARCH#######
+tspec2=ugarchspec(
+  variance.model = list(model = "fGARCH", submodel="TGARCH", garchOrder = c(2, 2)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+tfit2 = ugarchfit(return, spec=tspec2)
+tfit2
+infocriteria(tfit2)
+plot(tfit2, which=2)
+```
+#######mGARCH#######
+mspec2=ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 2)), 
+  mean.model = list(armaOrder = c(0, 2), archm=T), 
+  distribution.model = "sstd")
+mfit2 = ugarchfit(return, spec=mspec2)
+mfit2
+```
+
+QQ for tGARCH
+```{r}
+tspec3=ugarchspec(
+  variance.model = list(model = "fGARCH", submodel="TGARCH", garchOrder = c(1, 2)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+tfit3 = ugarchfit(return, spec=tspec3)
+
+plot((sigma(tfit3))^2, type="b",
+     ylab="Fitted Conditional Volatility", xlab="Time", main="Estimated Volatility for tGARCH(1,2)")
+
+plot(tfit3, which=9); #plot(tfit3, which=10); plot(tfit3, which=11) # check model assumption
+
+
+###
+
+tspec2=ugarchspec(
+  variance.model = list(model = "fGARCH", submodel="TGARCH", garchOrder = c(2, 2)), 
+  mean.model = list(armaOrder = c(0, 2)), 
+  distribution.model = "sstd")
+tfit2 = ugarchfit(return, spec=tspec2)
+plot((sigma(tfit2))^2, type="b",
+     ylab="Fitted Conditional Volatility", xlab="Time", main="Estimated Volatility for tGARCH(2,2)")
+
+par(mfrow=c(1,3))
+plot(tfit2, which=9); #plot(tfit2, which=10); plot(tfit2, which=11) # check model assumption
+
+```
+
+
+
+
